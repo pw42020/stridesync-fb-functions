@@ -1,15 +1,17 @@
 import os
+import sys
 from typing import Final
+from datetime import datetime
 
-import pygame
 import numpy as np
+import pygame
+from firebase_admin import storage
+
+os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
+
 import moviepy.video.io.ImageSequenceClip
 
 # global variables
-LS = []
-LT = []
-RS = []
-RT = []
 SCREEN_W = 600
 SCREEN_H = 600
 X_CENTER = SCREEN_W * 0.5
@@ -19,24 +21,29 @@ SAMPLING = 15
 
 ROTATE = 1.5708
 
+SNAPS = "/tmp/snaps"
+
 data_file = "data.run"
 
 
-def reading():
-    file = open(data_file, "r")
-    file.readline()
-    file.readline()
-    for line in file:
+def read(file: list[str]) -> list[list[float]]:
+    ls = []
+    lt = []
+    rs = []
+    rt = []
+    for line in file[1:]:  # skipping first line as first line is header
+        if line == "":
+            continue
         temp = line.split(",")
-        LS.append([float(temp[0]), float(temp[1]), float(temp[2])])
-        LT.append([float(temp[3]), float(temp[4]), float(temp[5])])
-        RS.append([float(temp[6]), float(temp[7]), float(temp[8])])
-        RT.append([float(temp[9]), float(temp[10]), float(temp[11])])
+        ls.append([float(temp[0]), float(temp[1]), float(temp[2])])
+        lt.append([float(temp[3]), float(temp[4]), float(temp[5])])
+        rs.append([float(temp[6]), float(temp[7]), float(temp[8])])
+        rt.append([float(temp[9]), float(temp[10]), float(temp[11])])
 
-    file.close()
+    return ls, lt, rs, rt
 
 
-def get_knee_pos(iteration: float, leg: str, point: str):
+def get_knee_pos(LT, RT, iteration: float, leg: str, point: str):
 
     # if leg == "L":
     #     rad_thigh = np.pi / -180 * (LT[iteration][2])
@@ -66,7 +73,7 @@ def get_knee_pos(iteration: float, leg: str, point: str):
         ]
 
 
-def get_shank_pos(it: float, knee_pos: list[float], leg: str):
+def get_shank_pos(LS, RS, it: float, knee_pos: list[float], leg: str):
     if leg == "L":
         return [
             knee_pos[0] - LEG_LENGTH * np.cos(LS[it][1]),
@@ -79,7 +86,7 @@ def get_shank_pos(it: float, knee_pos: list[float], leg: str):
         ]
 
 
-def create_video(image_folder: str, video_name: str):
+def create_video(image_folder: str, video_name: str) -> None:
     """
     Create video from images in folder
     Parameters
@@ -101,8 +108,32 @@ def create_video(image_folder: str, video_name: str):
     print("video released!")
 
 
-def main():
-    reading()
+def create_video_from_file(
+    *,
+    LS: list[list[float]],
+    LT: list[list[float]],
+    RS: list[list[float]],
+    RT: list[list[float]],
+    video_link: str,
+) -> str:
+    """
+    Create video from file
+    Parameters
+    ----------
+    LS : list[list[float]]
+        Left shank
+    LT : list[list[float]]
+        Left thigh
+    RS : list[list[float]]
+        Right shank
+    RT : list[list[float]]
+        Right thigh
+
+    Returns
+    -------
+    str
+        Video name
+    """
 
     try:
         os.makedirs("/tmp/snaps")
@@ -115,8 +146,8 @@ def main():
         pass
 
     pygame.init()
-    pygame.display.init()
-    window = pygame.display.set_mode((SCREEN_W, SCREEN_W))
+    # pygame.display.init()
+    window = pygame.Surface((SCREEN_W, SCREEN_W))
     pygame.display.set_caption("2D Animation - Lateral Perspective")
     window.fill((0, 0, 0))
 
@@ -141,14 +172,14 @@ def main():
                 pygame.quit()
                 break
         # left and right knee pos
-        l_knee_pos = get_knee_pos(iteration, "L", "K")
+        l_knee_pos = get_knee_pos(LT, RT, iteration, "L", "K")
         print(l_knee_pos)
-        r_knee_pos = get_knee_pos(iteration, "R", "K")
+        r_knee_pos = get_knee_pos(LT, RT, iteration, "R", "K")
 
         # # left and right shank pos
-        l_shank_pos = get_shank_pos(iteration, l_knee_pos, "L")
+        l_shank_pos = get_shank_pos(LS, RS, iteration, l_knee_pos, "L")
         print(l_shank_pos)
-        r_shank_pos = get_shank_pos(iteration, r_knee_pos, "R")
+        r_shank_pos = get_shank_pos(LS, RS, iteration, r_knee_pos, "R")
 
         # displaying knee angles of respective legs
         left = "Left: "
@@ -211,7 +242,8 @@ def main():
         window.blit(activity_length, (50, 50))
 
         # time.sleep(1 / SAMPLING)  # / SAMPLING
-        pygame.display.flip()
+        # pygame.display.flip()
+        window.blit(window, (0, 0))
         # save image
         filename = "/tmp/snaps/%06d.png" % file_num
         pygame.image.save(window, filename)
@@ -220,8 +252,17 @@ def main():
 
     pygame.quit()
     # once all photos recorded, create video
-    create_video("/tmp/snaps", "/tmp/movies/output.mp4")
+    # create name using {DATE}T{TIME}Z.mp4
+    # now: datetime = datetime.now()
+    # date: str = now.strftime("%Y-%m-%dT%H:%M:%S")
+    # video_link: str = f"/tmp/movies/{date}.mp4"
+    create_video("/tmp/snaps", video_link)
 
 
 if __name__ == "__main__":
-    main()
+    data_file_name = sys.argv[1]
+    print(data_file_name)
+    with open(data_file, "r") as f:
+        data = f.read().split("\n")
+    ls, lt, rs, rt = read(data)
+    create_video_from_file(LS=ls, LT=lt, RS=rs, RT=rt, video_link=data_file_name)
