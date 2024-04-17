@@ -8,6 +8,11 @@ Description
 -----------
 Firebase function that, when object transmitted to storage,
 creates a video from the object and stores it in the same bucket.
+
+Notes
+-----
+If on MacOS: make sure to add 'export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES' to
+~/.zshrc or ~/.bashrc to avoid memory error issues.
 """
 
 import os
@@ -15,7 +20,7 @@ from typing import Final
 import pathlib
 from datetime import datetime
 
-from firebase_functions import storage_fn
+from firebase_functions import storage_fn, options
 from firebase_admin import initialize_app, storage
 
 import graphical
@@ -37,7 +42,7 @@ def send_video_to_storage(userId: str, video_name: str, video_link: str) -> None
     ).upload_from_filename(video_link)
 
 
-@storage_fn.on_object_finalized(bucket="runs")
+@storage_fn.on_object_finalized(memory=options.MemoryOption.GB_1)
 def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     """
     Create video from object and store in same bucket
@@ -52,27 +57,20 @@ def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     # userId = event.data.userId
     # filename = event.data.filename
     # Get bucket and object
-    full_file_path = pathlib.PurePath(event.data.name)
-    # print(full_file_path)
+    bucket_name: str = event.data.bucket
+    full_file_path: pathlib.Path = pathlib.PurePath(event.data.name)
     # return
     filenames = str(full_file_path).split("/")
     # bucket: str = filenames[0]
-    bucket: str = event.data.bucket
-    # print(bucket, bucket == "runs")
     userId: str = filenames[1]
     filename: str = filenames[2]
     if filenames[0] != "runs":
         print(f"Bucket {filenames[0]} is not runs")
         return
-
-    bucket = storage.bucket(bucket)
-
-    blob = bucket.blob(str(full_file_path))
-    image_bytes = blob.download_as_bytes()
-
-    # Read data from object
-    data: Final[list[str]] = image_bytes.decode().split("\n")
-    ls, lt, rs, rt = graphical.read(data)
+    # try to download file another way, currently getting SIGKILL
+    blob = storage.bucket(bucket_name).blob(event.data.name)
+    # download file
+    blob.download_to_filename(f"/tmp/data.run")
 
     # Create video from object
     print(f"Creating video from {full_file_path}...")

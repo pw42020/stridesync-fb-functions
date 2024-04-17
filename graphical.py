@@ -17,13 +17,13 @@ SCREEN_H = 600
 X_CENTER = SCREEN_W * 0.5
 Y_CENTER = SCREEN_H * 0.5
 LEG_LENGTH = 100
-SAMPLING = 15
+SAMPLING = 30
 
 ROTATE = 1.5708
 
 SNAPS = "/tmp/snaps"
 
-data_file = "data.run"
+data_file = "/tmp/data.run"
 
 
 def read(file: list[str]) -> list[list[float]]:
@@ -104,7 +104,7 @@ def create_video(image_folder: str, video_name: str) -> None:
     # sort by integer value
     images.sort(key=lambda x: int(x.split(".")[0].split("/")[-1]))
     clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(images, fps=SAMPLING)
-    clip.write_videofile(video_name)
+    clip.write_videofile(video_name, fps=SAMPLING, threads=1, codec="libx264")
     print("video released!")
 
 
