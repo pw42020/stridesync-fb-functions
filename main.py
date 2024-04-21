@@ -20,26 +20,57 @@ from typing import Final
 import pathlib
 from datetime import datetime
 
+import google
 from firebase_functions import storage_fn, options
-from firebase_admin import initialize_app, storage
+from firebase_admin import initialize_app, storage, firestore
 
-import graphical
+
+import filter_run_data
 
 # initialize firebase app
 initialize_app()
 
 
-def send_video_to_storage(userId: str, video_name: str, video_link: str) -> None:
+def send_video_to_storage(userId: str, video_name: str, video_link: str) -> str:
     """
     Send video to storage
     Parameters
     ----------
     video_link : str
         Video link
+
+    Returns
+    -------
+    str
+        Video link
     """
     storage.bucket().blob(
         f"/movies/users/{userId}/{video_name}.mp4"
     ).upload_from_filename(video_link)
+
+    return storage.bucket().blob(f"/movies/users/{userId}/{video_name}.mp4").public_url
+
+
+def send_image_to_storage(userId: str, image_name: str, image_link: str) -> str:
+    """
+    Send image to storage
+    Parameters
+    ----------
+    image_link : str
+        Image link
+
+    Returns
+    -------
+    str
+        Image link
+    """
+    storage.bucket().blob(
+        f"/thumbnails/users/{userId}/{image_name}.png"
+    ).upload_from_filename(image_link)
+
+    return (
+        storage.bucket().blob(f"/thumbnails/users/{userId}/{image_name}.png").public_url
+    )
 
 
 @storage_fn.on_object_finalized(memory=options.MemoryOption.GB_1)
@@ -70,7 +101,9 @@ def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     # try to download file another way, currently getting SIGKILL
     blob = storage.bucket(bucket_name).blob(event.data.name)
     # download file
-    blob.download_to_filename(f"/tmp/data.run")
+    blob.download_to_filename(f"/tmp/data_pre.run")
+
+    filter_run_data.filter_run_data("/tmp/data_pre.run", "/tmp/data.run")
 
     # Create video from object
     print(f"Creating video from {full_file_path}...")
@@ -79,4 +112,43 @@ def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     date: str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     video_link: str = f"/tmp/movies/{date}.mp4"
     os.system(f"python graphical.py {video_link}")
-    send_video_to_storage(userId, f"{date}", video_link)
+    public_link: Final[str] = send_video_to_storage(userId, f"{date}", video_link)
+    # create thumbnail using first image added
+    thumbnail_link: str = f"/tmp/snaps/000001.png"
+    # upload thumbnail to storage
+    thumbnail_public_link: Final[str] = send_image_to_storage(
+        userId, f"{date}_thumb", thumbnail_link
+    )
+
+    # query for most recent post of user
+    firestore_client: google.cloud.firestore.Client = firestore.client()
+
+    print(f"userId: {userId}")
+    ref = firestore_client.document(f"users/{userId}")
+    data = ref.get().to_dict()
+    # if data is None:
+    #     print(f"User {userId} does not exist")
+    # get most recent post
+    queryAns = list(
+        firestore_client.collection(f"users/{userId}/posts")
+        .order_by("datePosted", direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream()
+    )
+    if queryAns is None:
+        print(f"User {userId} has no posts")
+        return
+    # get post with type hint
+    post_id: str = queryAns[0].id
+    post: firestore.firestore.DocumentSnapshot = queryAns[0].to_dict()
+    # update post
+    post["videoLink"] = public_link
+    post["thumbnailLink"] = thumbnail_public_link
+    # update post in firebase database
+    firestore_client.document(f"users/{userId}/posts/{post_id}").update(post)
+    # increment numPosts on /users/{userId} by 1
+    # check if numPosts has been initialized
+    if data is None:
+        ref.set({"numPosts": firestore.firestore.Increment(1)})
+    else:
+        ref.update({"numPosts": firestore.firestore.Increment(1)})
