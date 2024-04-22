@@ -90,7 +90,7 @@ def send_html_to_storage(userId: str, html_name: str, html_link: str) -> str:
         f"/plots/users/{userId}/{html_name}.html"
     ).upload_from_filename(html_link)
 
-    return storage.bucket().blob(f"/plots/users/{userId}/{html_name}").public_url
+    return storage.bucket().blob(f"/plots/users/{userId}/{html_name}.html").public_url
 
 
 @storage_fn.on_object_finalized(memory=options.MemoryOption.GB_1)
@@ -165,16 +165,17 @@ def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     if not os.path.exists("/tmp/plots"):
         os.makedirs("/tmp/plots")
     # generate plots for post as well
-    stride_filename = "/tmp/plots/stride.html"
-    generate_average_stride_plots(filename, stride_filename)
-    cadence_filename = "/tmp/plots/cadence.html"
-    generate_cadence_plot(filename, cadence_filename)
+    stride_filename = "/tmp/plots/stride.png"
+    generate_average_stride_plots("/tmp/data.run", stride_filename)
+    cadence_filename = "/tmp/plots/cadence.png"
+    generate_cadence_plot("/tmp/data.run", cadence_filename)
 
     # send files to storage
-    stride_public_link: Final[str] = send_html_to_storage(
+
+    stride_public_link: Final[str] = send_image_to_storage(
         userId, f"{date}_stride", stride_filename
     )
-    cadence_public_link: Final[str] = send_html_to_storage(
+    cadence_public_link: Final[str] = send_image_to_storage(
         userId, f"{date}_cadence", cadence_filename
     )
 

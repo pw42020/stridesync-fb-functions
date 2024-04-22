@@ -9,7 +9,7 @@ __pycache__/
 
 movies
 snaps
-
+*.html
 
 *.run
 *.log

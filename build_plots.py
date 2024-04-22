@@ -49,16 +49,20 @@ def generate_cadence_plot(in_filename: str, out_filename: str) -> None:
                     multiplier = 1 / ((cadence[-1] - cadence[0]) / 60)
                     spm.append(round(len(cadence) * multiplier, 2))
         # plot spm using plotly
-        go.Figure(
+        figure = go.Figure(
+            layout_title_text="Cadence Over Your Run",
             data=[
                 go.Scatter(
-                    x=[it / SAMPLING for it in range(len(spm))],
+                    x=cadence,
                     y=spm,
                     mode="lines+markers",
                     line_shape="spline",
                 )
-            ]
-        ).write_html(out_filename)
+            ],
+        )
+        figure.update_xaxes(title_text="Time (s)")
+        figure.update_yaxes(title_text="Strides per minute")
+        figure.write_image(out_filename)
 
 
 def generate_average_stride_plots(in_filename: str, out_filename: str) -> None:
@@ -82,6 +86,7 @@ def generate_average_stride_plots(in_filename: str, out_filename: str) -> None:
     import plotly.graph_objects as go
 
     # first create the figure
+    print(in_filename, out_filename)
     with open(in_filename, "r") as f:
         data: Final[list[str]] = f.read().split("\n")
         ls, lt, rs, rt = read(data)
@@ -172,12 +177,12 @@ def generate_average_stride_plots(in_filename: str, out_filename: str) -> None:
 
             y_interpolated[leg_names[i]] = gfg(xnew)
 
-        go.Figure(
+        figure = go.Figure(
             # make title
             layout_title_text="Median Stride",
             data=[
                 go.Scatter(
-                    x=xnew,
+                    x=[i / SAMPLING for i in xnew],
                     y=np.rad2deg(y_interpolated[leg_name]),
                     # name of the leg
                     name=leg_name,
@@ -185,10 +190,13 @@ def generate_average_stride_plots(in_filename: str, out_filename: str) -> None:
                 )
                 for leg_name in leg_names
             ],
-        ).write_html(out_filename)
+        )
+        figure.update_xaxes(title_text="Time (s)")
+        figure.update_yaxes(title_text="Degrees")
+        figure.write_image(out_filename)
 
 
 if __name__ == "__main__":
     data_file_name = sys.argv[1]
     print(data_file_name)
-    generate_average_stride_plots("user", "run", data_file_name)
+    generate_cadence_plot(data_file_name, "hi.png")
