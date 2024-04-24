@@ -54,7 +54,7 @@ def generate_cadence_plot(in_filename: str, out_filename: str) -> None:
             data=[
                 go.Scatter(
                     x=cadence,
-                    y=spm,
+                    y=spm[5:], # cutting off first 5 as they're bad data
                     mode="lines+markers",
                     line_shape="spline",
                 )
@@ -119,7 +119,12 @@ def generate_average_stride_plots(in_filename: str, out_filename: str) -> None:
                         cadence = []
 
         # get median spm
-        median_spm = np.percentile(spm, 0.5, interpolation="nearest")
+        print(spm)
+        if len(spm) == 0:
+            # didn't get any strides
+            return
+        else:
+            median_spm = np.percentile(spm, 0.5, interpolation="nearest")
         # get index for median_spm
         median_spm_index = spm.index(median_spm)
         print(

@@ -16,6 +16,7 @@ If on MacOS: make sure to add 'export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES' t
 """
 
 import os
+import shutil
 from typing import Final
 import pathlib
 from datetime import datetime
@@ -93,7 +94,7 @@ def send_html_to_storage(userId: str, html_name: str, html_link: str) -> str:
     return storage.bucket().blob(f"/plots/users/{userId}/{html_name}.html").public_url
 
 
-@storage_fn.on_object_finalized(memory=options.MemoryOption.GB_1)
+@storage_fn.on_object_finalized(timeout_sec=1000, memory=options.MemoryOption.GB_1)
 def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     """
     Create video from object and store in same bucket
@@ -121,7 +122,17 @@ def create_video(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]):
     # try to download file another way, currently getting SIGKILL
     blob = storage.bucket(bucket_name).blob(event.data.name)
     # download file
-    blob.download_to_filename(f"/tmp/data_pre.run")
+    if os.path.exists("/tmp/data_pre.run"):
+        os.remove("/tmp/data_pre.run")
+    if os.path.exists("/tmp/data.run"):
+        os.remove("/tmp/data.run")
+    if os.path.exists("/tmp/movies"):
+        shutil.rmtree("/tmp/movies")
+        os.mkdir("/tmp/movies")
+    if os.path.exists("/tmp/snaps"):
+        shutil.rmtree("/tmp/snaps")
+        os.mkdir("/tmp/snaps")
+    blob.download_to_filename("/tmp/data_pre.run")
 
     filter_run_data.filter_run_data("/tmp/data_pre.run", "/tmp/data.run")
 

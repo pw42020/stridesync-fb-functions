@@ -10,7 +10,7 @@ __pycache__/
 movies
 snaps
 *.html
-
+*.png
 *.run
 *.log
 # C extensions
